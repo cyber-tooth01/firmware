@@ -415,6 +415,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
 
             case QMI8658_ADDR:
+                // Check for SEN66 first
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2); // SEN66 product ID
+                if (registerValue == 0x0660) { // SEN66 product ID
+                    type = SEN66;
+                    logFoundDevice("SEN66", (uint8_t)addr.address);
+                    break;
+                }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;

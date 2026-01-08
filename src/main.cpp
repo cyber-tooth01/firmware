@@ -760,6 +760,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SEN66, MESHTASTIC_TELEMETRY_SENSOR_TYPE_SEN66);
 
 #endif
 

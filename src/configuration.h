@@ -235,7 +235,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PCT2075_ADDR 0x37
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
+#define SEN66_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
+
+// Sensor types (for when protobuf is updated)
+#define MESHTASTIC_TELEMETRY_SENSOR_TYPE_SEN66 46
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
