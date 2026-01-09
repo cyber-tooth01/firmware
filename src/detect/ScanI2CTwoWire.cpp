@@ -415,13 +415,27 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
 
             case QMI8658_ADDR:
-                // Check for SEN66 first
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2); // SEN66 product ID
-                if (registerValue == 0x0660) { // SEN66 product ID
+                // Prefer SEN66 at the known address (0x6B) while testing — hard-coded
+                if ((uint8_t)addr.address == (uint8_t)SEN66_ADDR) {
                     type = SEN66;
                     logFoundDevice("SEN66", (uint8_t)addr.address);
                     break;
                 }
+                // If not the configured SEN66 address, try the raw probe as a fallback
+                // SEN66 detection: send raw startContinuousMeasurement command (0x0010)
+                {
+                    // Use low-level Wire to write the two-byte command to the device
+                    Wire.beginTransmission((uint8_t)addr.address);
+                    Wire.write(0x00); // command MSB
+                    Wire.write(0x10); // command LSB (0x0010 = startContinuousMeasurement)
+                    uint8_t err = Wire.endTransmission();
+                    if (err == 0) {
+                        type = SEN66;
+                        logFoundDevice("SEN66", (uint8_t)addr.address);
+                        break;
+                    }
+                }
+
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;

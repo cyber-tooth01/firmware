@@ -239,7 +239,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR553ALS_ADDR 0x23
 
 // Sensor types (for when protobuf is updated)
-#define MESHTASTIC_TELEMETRY_SENSOR_TYPE_SEN66 46
+#define MESHTASTIC_TELEMETRY_SENSOR_TYPE_SEN66 static_cast<meshtastic_TelemetrySensorType>(46)
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

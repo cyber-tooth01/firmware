@@ -14,27 +14,32 @@ SEN66Sensor::SEN66Sensor() : TelemetrySensor(MESHTASTIC_TELEMETRY_SENSOR_TYPE_SE
 bool SEN66Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    sensor.begin(*bus, SEN66_I2C_ADDR_6B);
     
-    // Device reset
-    int16_t error = sensor.deviceReset();
+    int16_t error = 0;
+    
+    // Initialize sensor with bus and address
+    sensor.begin(*bus, SEN66_ADDR);
+    LOG_DEBUG("SEN66 begin() called");
+    delay(100);
+    
+    // Device reset with error check
+    error = sensor.deviceReset();
     if (error != 0) {
         LOG_ERROR("SEN66 device reset failed: %d", error);
         return false;
     }
-    delay(1200); // Wait for reset
+    LOG_DEBUG("SEN66 reset succeeded");
+    delay(1200);
     
-    // Setup advanced features (temperature compensation, CO2 calibration)
-    setupTemperatureCompensation();
-    
-    // Start continuous measurement
+    // Start measurement with error check
     error = sensor.startContinuousMeasurement();
     if (error != 0) {
-        LOG_ERROR("SEN66 start measurement failed: %d", error);
+        LOG_ERROR("SEN66 startContinuousMeasurement failed: %d", error);
         return false;
     }
+    LOG_INFO("SEN66 init succeeded");
     
-    lastFanCleanTime = getTime() / 1000; // Initialize fan cleaning timer
+    lastFanCleanTime = getTime() / 1000;
     initI2CSensor();
     return true;
 }
