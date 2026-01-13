@@ -1,6 +1,11 @@
+// SEN66Sensor.h - Corrected I2C Master Implementation
+// Replace your existing src/modules/Telemetry/Sensor/SEN66Sensor.h with this
+
+#pragma once
+
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<SensirionI2cSen66.h>)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"

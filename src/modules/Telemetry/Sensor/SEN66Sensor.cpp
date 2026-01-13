@@ -8,181 +8,81 @@
 #include <SensirionI2cSen66.h>
 #include "RTC.h"
 #include "main.h"
+#include <pb_decode.h>
+
+// I2C slave address for Meshtastic device
+#define MT_I2C_ADDRESS 0x11
+
+// Last received metrics from I2C master (sensor board)
+static meshtastic_AirQualityMetrics lastMetrics = meshtastic_AirQualityMetrics_init_zero;
+static bool hasNewData = false;
+
+// Protobuf decode helper
+bool proto_decode(const uint8_t *srcbuf, size_t srcbufsize, const pb_msgdesc_t *fields, void *dest_struct)
+{
+    pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
+    if (!pb_decode(&stream, fields, dest_struct)) {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+// I2C receive callback - called when sensor board sends data
+void onReceiveSEN66Metrics(int length)
+{
+    uint8_t buffer[meshtastic_AirQualityMetrics_size];
+    Wire.readBytes(buffer, length);
+
+    meshtastic_AirQualityMetrics received = meshtastic_AirQualityMetrics_init_zero;
+    if (proto_decode(buffer, length, meshtastic_AirQualityMetrics_fields, &received)) {
+        lastMetrics = received;
+        hasNewData = true;
+    }
+}
 
 SEN66Sensor::SEN66Sensor() : TelemetrySensor(MESHTASTIC_TELEMETRY_SENSOR_TYPE_SEN66, "SEN66") {}
 
 bool SEN66Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s", sensorName);
-    
-    int16_t error = 0;
-    
-    // Initialize sensor with bus and address
-    sensor.begin(*bus, SEN66_ADDR);
-    LOG_DEBUG("SEN66 begin() called");
-    delay(100);
-    
-    // Device reset with error check
-    error = sensor.deviceReset();
-    if (error != 0) {
-        LOG_ERROR("SEN66 device reset failed: %d", error);
-        return false;
-    }
-    LOG_DEBUG("SEN66 reset succeeded");
-    delay(1200);
-    
-    // Start measurement with error check
-    error = sensor.startContinuousMeasurement();
-    if (error != 0) {
-        LOG_ERROR("SEN66 startContinuousMeasurement failed: %d", error);
-        return false;
-    }
-    LOG_INFO("SEN66 init succeeded");
-    
-    lastFanCleanTime = getTime() / 1000;
-    initI2CSensor();
+    LOG_INFO("Init sensor: %s (I2C slave mode)", sensorName);
+
+    // Store the bus for later use
+    i2cBus = bus;
+
+    // Initialize as I2C slave to receive data from sensor board
+    i2cBus->begin(MT_I2C_ADDRESS);
+    i2cBus->onReceive(onReceiveSEN66Metrics);
+
+    LOG_INFO("SEN66 I2C slave initialized at address 0x%x", MT_I2C_ADDRESS);
     return true;
-}
-
-void SEN66Sensor::setupTemperatureCompensation()
-{
-    // Set temperature offset parameters for PCB heat compensation
-    // The SEN66 automatically applies this compensation to all measurements
-    // Parameters: offset (scaled by 200), slope (scaled by 10000), time_constant (seconds), slot (0-4)
-    // Example: 0.5°C offset, 0.01 slope, 10s time constant, slot 0
-    // Formula applied internally: T_compensated = T_raw + (slope * T_raw) + offset
-    int16_t error = sensor.setTemperatureOffsetParameters(100, 100, 10, 0);
-    if (error == 0) {
-        LOG_INFO("SEN66 temperature compensation configured (offset=0.5°C, slope=0.01)");
-    } else {
-        LOG_WARN("SEN66 temperature compensation setup failed: %d", error);
-    }
-    
-    // Optional: Set ambient pressure for CO2 compensation (default: 1013 hPa)
-    // This affects CO2 sensor accuracy - set to your local pressure for best results
-    // error = sensor.setAmbientPressure(1013);
-    
-    // Optional: CO2 automatic self-calibration is enabled by default
-    // Disable if you need manual calibration control
-}
-
-void SEN66Sensor::checkDeviceStatus()
-{
-    SEN66DeviceStatus deviceStatus;
-    int16_t error = sensor.readDeviceStatus(deviceStatus);
-    if (error == 0) {
-        if (deviceStatus.fanError) {
-            LOG_WARN("SEN66: Fan error detected");
-        }
-        if (deviceStatus.rhtError) {
-            LOG_WARN("SEN66: RH/T sensor error");
-        }
-        if (deviceStatus.gasError) {
-            LOG_WARN("SEN66: Gas sensor (VOC/NOx) error");
-        }
-        if (deviceStatus.pmError) {
-            LOG_WARN("SEN66: PM sensor error");
-        }
-        if (deviceStatus.co22Error) {
-            LOG_WARN("SEN66: CO2 sensor error");
-        }
-        if (deviceStatus.fanSpeedWarning) {
-            LOG_WARN("SEN66: Fan speed warning - consider running fan cleaning");
-        }
-    }
-}
-
-void SEN66Sensor::performFanCleaning()
-{
-    LOG_INFO("SEN66: Starting fan cleaning routine");
-    int16_t error = sensor.startFanCleaning();
-    if (error == 0) {
-        LOG_INFO("SEN66: Fan cleaning initiated (10 seconds at max speed)");
-        lastFanCleanTime = getTime() / 1000;
-        // The fan will automatically stop after 10 seconds
-    } else {
-        LOG_ERROR("SEN66: Fan cleaning failed with error: %d", error);
-    }
 }
 
 int32_t SEN66Sensor::runOnce()
 {
-    // Check device status periodically (every 100 reads ≈ 100 seconds)
-    if ((readCount++ % 100) == 0) {
-        checkDeviceStatus();
-    }
-    
-    // Perform fan cleaning periodically (every 7 days to remove dust)
-    // The fan keeps PM sensor accurate and extends device lifetime
-    uint32_t currentTime = getTime() / 1000;
-    if ((currentTime - lastFanCleanTime) > (FAN_CLEANING_INTERVAL_MS / 1000)) {
-        performFanCleaning();
-        // Return longer interval while fan cleaning is in progress
-        return 10000; // 10 seconds
-    }
-    
+    // No periodic tasks needed for I2C slave mode
     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
 bool SEN66Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    float massConcentrationPm1p0 = 0.0;
-    float massConcentrationPm2p5 = 0.0;
-    float massConcentrationPm4p0 = 0.0;
-    float massConcentrationPm10p0 = 0.0;
-    float humidity = 0.0;
-    float temperature = 0.0;
-    float vocIndex = 0.0;
-    float noxIndex = 0.0;
-    uint16_t co2 = 0;
-    
-    int16_t error = sensor.readMeasuredValues(
-        massConcentrationPm1p0, massConcentrationPm2p5, massConcentrationPm4p0,
-        massConcentrationPm10p0, humidity, temperature, vocIndex, noxIndex, co2);
-    
-    if (error != 0) {
-        LOG_ERROR("SEN66 read failed: %d", error);
+    if (!hasNewData) {
+        LOG_DEBUG("SEN66: No new data received from sensor board");
         return false;
     }
-    
-    // Populate AirQualityMetrics
+
+    // Copy the received metrics
     measurement->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
-    
-    // PM measurements
-    measurement->variant.air_quality_metrics.has_pm10_environmental = true;
-    measurement->variant.air_quality_metrics.pm10_environmental = (uint32_t)massConcentrationPm1p0;
-    
-    measurement->variant.air_quality_metrics.has_pm25_environmental = true;
-    measurement->variant.air_quality_metrics.pm25_environmental = (uint32_t)massConcentrationPm2p5;
-    
-    measurement->variant.air_quality_metrics.has_pm40_standard = true;
-    measurement->variant.air_quality_metrics.pm40_standard = (uint32_t)massConcentrationPm4p0;
-    
-    measurement->variant.air_quality_metrics.has_pm100_environmental = true;
-    measurement->variant.air_quality_metrics.pm100_environmental = (uint32_t)massConcentrationPm10p0;
-    
-    // VOC and NOx
-    measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
-    measurement->variant.air_quality_metrics.pm_voc_idx = vocIndex;
-    
-    measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
-    measurement->variant.air_quality_metrics.pm_nox_idx = noxIndex;
-    
-    // CO2
-    measurement->variant.air_quality_metrics.has_co2 = true;
-    measurement->variant.air_quality_metrics.co2 = co2;
-    
-    // Temperature and humidity
-    measurement->variant.air_quality_metrics.has_pm_temperature = true;
-    measurement->variant.air_quality_metrics.pm_temperature = temperature;
-    
-    measurement->variant.air_quality_metrics.has_pm_humidity = true;
-    measurement->variant.air_quality_metrics.pm_humidity = humidity;
-    
-    LOG_DEBUG("SEN66 metrics: PM1.0=%.1f, PM2.5=%.1f, PM4.0=%.1f, PM10.0=%.1f, VOC=%.1f, NOx=%.1f, CO2=%u, T=%.1f, RH=%.1f",
-              massConcentrationPm1p0, massConcentrationPm2p5, massConcentrationPm4p0, massConcentrationPm10p0,
-              vocIndex, noxIndex, co2, temperature, humidity);
-    
+    measurement->variant.air_quality_metrics = lastMetrics;
+
+    // Reset the new data flag
+    hasNewData = false;
+
+    LOG_DEBUG("SEN66 metrics received: PM1.0=%u, PM2.5=%u, PM4.0=%u, PM10.0=%u, VOC=%.1f, NOx=%.1f, CO2=%u, T=%.1f, RH=%.1f",
+              lastMetrics.pm10_environmental, lastMetrics.pm25_environmental, lastMetrics.pm40_standard,
+              lastMetrics.pm100_environmental, lastMetrics.pm_voc_idx, lastMetrics.pm_nox_idx,
+              lastMetrics.co2, lastMetrics.pm_temperature, lastMetrics.pm_humidity);
+
     return true;
 }
 

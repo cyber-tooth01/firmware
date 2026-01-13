@@ -155,6 +155,7 @@ static std::forward_list<TelemetrySensor *> sensors;
 template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
 {
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
+    LOG_DEBUG("addSensor: Looking for device type %d, found type %d at address 0x%x", (int)type, (int)dev.type, dev.address.address);
     if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
         TelemetrySensor *sensor = new T();
 #if WIRE_INTERFACES_COUNT > 1
@@ -178,7 +179,9 @@ template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType ty
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
+    LOG_DEBUG("EnvironmentTelemetry: i2cScanFinished called");
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+        LOG_DEBUG("EnvironmentTelemetry: module not enabled");
         return;
     }
     LOG_INFO("Environment Telemetry adding I2C devices...");
@@ -274,7 +277,8 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
 #if __has_include(<SensirionI2cSen66.h>)
-    addSensor<SEN66Sensor>(i2cScanner, ScanI2C::DeviceType::SEN66);
+    LOG_DEBUG("EnvironmentTelemetry: Adding SEN66 sensor (I2C slave mode)");
+    addSensor<SEN66Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
 
 #endif
