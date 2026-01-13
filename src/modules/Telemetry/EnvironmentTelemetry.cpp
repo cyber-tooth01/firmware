@@ -277,8 +277,8 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
 #if __has_include(<SensirionI2cSen66.h>)
-    LOG_DEBUG("EnvironmentTelemetry: Adding SEN66 sensor (I2C slave mode)");
-    addSensor<SEN66Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+    LOG_DEBUG("EnvironmentTelemetry: Adding SEN66 sensor (direct I2C)");
+    addSensor<SEN66Sensor>(i2cScanner, ScanI2C::DeviceType::SEN66);
 #endif
 
 #endif

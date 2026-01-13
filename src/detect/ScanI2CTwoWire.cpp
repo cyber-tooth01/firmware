@@ -158,6 +158,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
+
+#if __has_include(<SensirionI2cSen66.h>)
+        // If we see traffic on the SEN66 address, register it explicitly as SEN66
+        if (addr.address == SEN66_ADDR) {
+            type = SEN66;
+            logFoundDevice("SEN66", (uint8_t)addr.address);
+            deviceAddresses[type] = addr;
+            foundDevices[addr] = type;
+            continue;
+        }
+#endif
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         err = 2;
@@ -641,15 +652,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
 {
-    if (address.port == ScanI2C::I2CPort::WIRE) {
+    // If the scanner passes NO_I2C (DeviceType::NONE), default to Wire so single-device sensors still work
+    if (address.port == ScanI2C::I2CPort::WIRE || address.port == ScanI2C::I2CPort::NO_I2C) {
         return &Wire;
-    } else {
-#if WIRE_INTERFACES_COUNT == 2
-        return &Wire1;
-#else
-        return &Wire;
-#endif
     }
+
+#if WIRE_INTERFACES_COUNT == 2
+    return &Wire1;
+#else
+    return &Wire;
+#endif
 }
 
 size_t ScanI2CTwoWire::countDevices() const

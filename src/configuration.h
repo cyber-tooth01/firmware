@@ -235,6 +235,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PCT2075_ADDR 0x37
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
+// Sensirion SEN66 default I2C address
 #define SEN66_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 
