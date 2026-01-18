@@ -674,6 +674,35 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
+            // Also send JSON text message with SEN66 data if available
+            // Note: SEN66Sensor.getMetrics() sets which_variant to air_quality_metrics
+            // So after getEnvironmentTelemetry, the variant might be air_quality_metrics
+            if (m.which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
+                char jsonBuffer[256];
+                snprintf(jsonBuffer, sizeof(jsonBuffer),
+                    "{\"pm1\":%u,\"pm25\":%u,\"pm4\":%u,\"pm10\":%u,\"voc\":%.1f,\"nox\":%.1f,\"t\":%.1f,\"rh\":%.1f}",
+                    m.variant.air_quality_metrics.pm10_environmental,
+                    m.variant.air_quality_metrics.pm25_environmental,
+                    m.variant.air_quality_metrics.pm40_standard,
+                    m.variant.air_quality_metrics.pm100_environmental,
+                    m.variant.air_quality_metrics.pm_voc_idx,
+                    m.variant.air_quality_metrics.pm_nox_idx,
+                    m.variant.air_quality_metrics.pm_temperature,
+                    m.variant.air_quality_metrics.pm_humidity);
+
+                meshtastic_MeshPacket *textPacket = allocDataPacket();
+                textPacket->to = dest;
+                textPacket->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                textPacket->decoded.payload.size = strlen(jsonBuffer);
+                memcpy(textPacket->decoded.payload.bytes, jsonBuffer, textPacket->decoded.payload.size);
+                textPacket->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+
+                LOG_INFO("SEN66_JSON: %s", jsonBuffer);
+                // Send to mesh with ccToPhone=true to show in sender's app as "sent"
+                // MQTT module will automatically forward TEXT_MESSAGE_APP packets if MQTT is enabled
+                service->sendToMesh(textPacket, RX_SRC_LOCAL, true);
+            }
+
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 notification->level = meshtastic_LogRecord_Level_INFO;
